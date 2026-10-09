@@ -2,6 +2,14 @@
 
 A local Flask attendance dashboard with an SQLite roster, live OpenCV webcam preview, QR-based check-in, phone-captured group photo check-in, and a responsive Tailwind-powered interface.
 
+## Web preview and deployment
+
+GitHub hosts this repository's source code; GitHub Pages cannot run the Flask server, SQLite database, or webcam endpoints. A successful Pages build therefore does not mean the attendance dashboard is running. To create the actual HTTPS app, deploy the included Render Blueprint:
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https%3A%2F%2Fgithub.com%2Fcyberboy56-alt%2Fattendly-smart-attendance)
+
+The Blueprint uses a Starter web service and a persistent disk, which require a paid Render plan. During setup, provide a unique `ATTENDANCE_PASSWORD` of at least 16 characters in Render's environment-variable prompt. Render will generate `SECRET_KEY`. Once deployment completes, Render shows the live `https://…onrender.com` URL. Do not share that URL or password publicly; the app stores attendance and biometric face templates.
+
 ## Start the app
 
 Use Python 3.10 or newer.

@@ -5,7 +5,7 @@ from io import BytesIO
 from datetime import datetime
 from unittest.mock import patch
 
-from app import app, initialize_database
+from app import ATTENDANCE_TIMEZONE, app, initialize_database
 
 
 class AttendanceAppTests(unittest.TestCase):
@@ -49,7 +49,7 @@ class AttendanceAppTests(unittest.TestCase):
         self.assertIn(b"/video_feed", response.data)
 
     def test_scan_marks_student_present_and_prevents_duplicate(self):
-        scanned_at = datetime.now().astimezone().replace(hour=8, minute=59)
+        scanned_at = datetime.now(ATTENDANCE_TIMEZONE).replace(hour=8, minute=59)
         with app.test_request_context():
             from app import mark_attendance
             first, first_status = mark_attendance("ATTENDANCE:STU-1001", scanned_at)
@@ -63,7 +63,7 @@ class AttendanceAppTests(unittest.TestCase):
         self.assertEqual(dashboard["counts"]["absent"], 2)
 
     def test_scan_marks_late_and_rejects_unknown_code(self):
-        scanned_at = datetime.now().astimezone().replace(hour=9, minute=1)
+        scanned_at = datetime.now(ATTENDANCE_TIMEZONE).replace(hour=9, minute=1)
         with app.test_request_context():
             from app import mark_attendance
             result, status = mark_attendance("STU-1002", scanned_at)
