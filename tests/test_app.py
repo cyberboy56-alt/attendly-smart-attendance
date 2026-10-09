@@ -38,7 +38,7 @@ class AttendanceAppTests(unittest.TestCase):
         data = response.get_json()
         self.assertEqual(data["counts"], {"present": 0, "late": 0, "absent": 3, "total": 3})
         self.assertEqual(len(data["students"]), 3)
-        self.assertTrue(data["students"][0]["qr_code"].startswith("data:image/png;base64,"))
+        self.assertTrue(data["students"][0]["qr_code"].startswith("data:image/svg+xml;base64,"))
         self.assertFalse(data["students"][0]["face_enrolled"])
 
     def test_homepage_renders_responsive_dashboard(self):

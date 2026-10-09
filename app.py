@@ -16,6 +16,7 @@ from zoneinfo import ZoneInfo
 import cv2
 import numpy as np
 import qrcode
+from qrcode.image.svg import SvgPathImage
 from flask import Flask, abort, current_app, jsonify, redirect, render_template, request, Response, session, url_for
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -209,11 +210,11 @@ def initialize_database():
 
 
 def qr_data_url(student_code):
-    image = qrcode.make(student_code)
+    image = qrcode.make(student_code, image_factory=SvgPathImage)
     buffer = io.BytesIO()
-    image.save(buffer, format="PNG")
+    image.save(buffer)
     encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
-    return f"data:image/png;base64,{encoded}"
+    return f"data:image/svg+xml;base64,{encoded}"
 
 
 def student_payload(student):
