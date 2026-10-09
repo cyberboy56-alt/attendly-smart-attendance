@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#090d14">
+  <title>Attendly — Smart attendance terminal</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            ink: "#090d14",
+            panel: "#111823",
+            line: "#202a38",
+            mint: "#74e0b4",
+            sky: "#76a9ff"
+          },
+          fontFamily: { sans: ["Inter", "ui-sans-serif", "system-ui"] }
+        }
+      }
+    };
+  </script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="min-h-screen bg-ink text-slate-100 antialiased">
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="/" aria-label="Attendly home">
+        <span class="brand-mark">a.</span>
+        <span>attendly<span class="brand-dot">.</span><small>LEARNING, IN SESSION</small></span>
+      </a>
+      <div class="workspace-label">WORKSPACE</div>
+      <nav class="side-nav" aria-label="Main navigation">
+        <a class="nav-link active" href="#overview"><span>◫</span> Overview</a>
+        <a class="nav-link" href="#attendance"><span>◷</span> Attendance log</a>
+        <a class="nav-link" href="#students"><span>♙</span> Students & QR codes</a>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="help-card">
+          <div class="help-icon">✳</div>
+          <strong>Made for better days.</strong>
+          <p>A friendly little terminal for getting every learner in the room.</p>
+        </div>
+        <div class="profile">
+          <div class="avatar">T</div>
+          <div><strong>Teacher dashboard</strong><span>Local workspace</span></div>
+          <span class="profile-menu">···</span>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main-content" id="overview">
+      <header class="topbar">
+        <div class="mobile-brand"><span class="brand-mark">a.</span> attendly<span class="brand-dot">.</span></div>
+        <div class="breadcrumb">Workspace <span>/</span> <strong>Attendance</strong></div>
+        <div class="topbar-right">
+          <span class="today-date" id="top-date"></span>
+          <span class="live-pill"><i></i> Live</span>
+        </div>
+      </header>
+
+      <div class="page-wrap">
+        <section class="welcome-row">
+          <div>
+            <div class="eyebrow"><span class="eyebrow-line"></span> YOUR CLASSROOM, AT A GLANCE</div>
+            <h1>Good morning, <span>teacher.</span></h1>
+            <p class="welcome-copy">A calm start to a great day of learning.</p>
+          </div>
+          <div class="date-chip"><span>◷</span><div><small>CLASS DATE</small><strong id="class-date">{{ date }}</strong></div></div>
+        </section>
+
+        <section class="stats-grid" aria-label="Attendance summary">
+          <article class="stat-card present-card">
+            <div class="stat-top"><span class="stat-label">Present</span><span class="stat-icon">✓</span></div>
+            <div class="stat-number" id="count-present">{{ counts.present }}</div>
+            <div class="stat-foot"><span class="status-dot green"></span> Checked in on time</div>
+          </article>
+          <article class="stat-card absent-card">
+            <div class="stat-top"><span class="stat-label">Absent</span><span class="stat-icon">−</span></div>
+            <div class="stat-number" id="count-absent">{{ counts.absent }}</div>
+            <div class="stat-foot"><span class="status-dot muted"></span> Not checked in yet</div>
+          </article>
+          <article class="stat-card late-card">
+            <div class="stat-top"><span class="stat-label">Late</span><span class="stat-icon">↗</span></div>
+            <div class="stat-number" id="count-late">{{ counts.late }}</div>
+            <div class="stat-foot"><span class="status-dot amber"></span> Arrived after {{ late_after }}</div>
+          </article>
+          <article class="stat-card total-card">
+            <div class="stat-top"><span class="stat-label">On the roster</span><span class="stat-icon">♙</span></div>
+            <div class="stat-number" id="count-total">{{ counts.total }}</div>
+            <div class="stat-foot"><span class="status-dot blue"></span> Lovely learners</div>
+          </article>
+        </section>
+
+        <section class="work-grid">
+          <article class="terminal-card">
+            <div class="card-heading">
+              <div><div class="eyebrow"><span class="terminal-led"></span> CLASSROOM TERMINAL</div><h2>Ready when you are.</h2></div>
+              <span class="terminal-tag"><span></span> <span id="camera-label">CONNECTING</span></span>
+            </div>
+            <div class="camera-frame">
+              <img id="camera-feed" src="{{ url_for('video_feed') }}" alt="Live webcam QR scanner feed">
+              <div class="camera-overlay">
+                <span class="scan-corner top-left"></span><span class="scan-corner top-right"></span>
+                <span class="scan-corner bottom-left"></span><span class="scan-corner bottom-right"></span>
+                <div class="scan-guide"><span></span></div>
+                <div class="camera-caption"><i></i><span id="camera-event">Starting camera…</span></div>
+              </div>
+            </div>
+            <div class="terminal-footer">
+              <div class="terminal-instruction"><span class="qr-glyph">▦</span><span><strong>Scan a student QR code</strong><small>Hold it in the frame to check in automatically.</small></span></div>
+              <div class="terminal-meta"><span class="green-text">●</span> No. <b id="terminal-count">{{ counts.present + counts.late }}</b> checked in</div>
+            </div>
+          </article>
+
+          <article class="activity-card" id="attendance">
+            <div class="section-title-row">
+              <div><div class="eyebrow">A LITTLE PROGRESS</div><h2>Today's check-ins</h2></div>
+              <span class="count-badge" id="activity-count">{{ attendance|length }} today</span>
+            </div>
+            <div class="attendance-list" id="attendance-list">
+              {% for entry in attendance %}
+              <div class="attendance-row">
+                <div class="avatar student-avatar">{{ entry.name[:1]|upper }}</div>
+                <div class="attendance-person"><strong>{{ entry.name }}</strong><span>{{ entry.student_code }}</span></div>
+                <div class="attendance-result"><span class="result-pill {{ entry.status }}">{{ entry.status }}</span><time>{{ entry.scanned_at[11:16] }}</time></div>
+              </div>
+              {% else %}
+              <div class="empty-state" id="empty-attendance"><div class="empty-icon">◷</div><strong>It's a fresh start.</strong><span>Student check-ins will show up here.</span></div>
+              {% endfor %}
+            </div>
+            <div class="activity-note"><span>✦</span> Every check-in helps your class shine.</div>
+          </article>
+        </section>
+
+        <section class="group-photo-card" aria-labelledby="group-photo-title">
+          <div class="group-photo-copy">
+            <div class="eyebrow"><span class="terminal-led"></span> MOBILE CLASS CHECK-IN</div>
+            <h2 id="group-photo-title">Take one class photo.</h2>
+            <p>Capture a clear group photo on your phone. Enrolled faces are matched on this computer and checked in automatically.</p>
+            <div class="privacy-note"><span>⌑</span> Photos are processed locally and discarded. Only opted-in face templates are kept.</div>
+          </div>
+          <form id="class-photo-form" class="group-photo-form">
+            <input id="class-photo-input" type="file" accept="image/*" capture="environment" hidden>
+            <img class="group-photo-preview" id="class-photo-preview" alt="Selected class photo preview" hidden>
+            <div class="group-photo-actions">
+              <button class="camera-pick-button" type="button" id="pick-class-photo">▧ <span>Use phone camera</span></button>
+              <button class="analyze-button" type="submit" id="analyze-class-photo" disabled>Recognize & check in <span>→</span></button>
+            </div>
+            <div class="photo-feedback" id="photo-feedback" role="status" aria-live="polite">For best results, use a bright, front-facing photo.</div>
+            <div class="photo-matches" id="photo-matches"></div>
+          </form>
+        </section>
+
+        <section class="students-section" id="students">
+          <div class="section-title-row students-title">
+            <div><div class="eyebrow">YOUR CLASS COMMUNITY</div><h2>Students & QR codes</h2><p class="section-subtitle">Print learner codes or enroll an agreed face template for photo check-in.</p></div>
+            <button class="add-button" id="open-add-student"><span>＋</span> Add a student</button>
+          </div>
+          <div class="student-grid" id="student-grid">
+            {% for student in students %}
+            <article class="student-card" data-code="{{ student.student_code }}">
+              <img class="student-qr" src="{{ student.qr_code }}" alt="QR code for {{ student.name }}">
+              <div class="student-card-body">
+                <div class="student-card-info"><div class="avatar student-avatar">{{ student.name[:1]|upper }}</div><div><strong>{{ student.name }}</strong><span>{{ student.student_code }}</span></div></div>
+                <span class="face-state {{ 'enrolled' if student.face_enrolled else '' }}">{{ 'Face enrolled' if student.face_enrolled else 'QR check-in only' }}</span>
+                <button class="face-action" type="button" data-face-action="{{ student.student_code }}">{{ 'Replace face photo' if student.face_enrolled else 'Enroll face photo' }}</button>
+                {% if student.face_enrolled %}<button class="remove-face-action" type="button" data-remove-face="{{ student.student_code }}">Remove saved face template</button>{% endif %}
+              </div>
+            </article>
+            {% else %}
+            <div class="roster-empty" id="empty-roster">Add your first student to create their personal check-in QR code.</div>
+            {% endfor %}
+          </div>
+        </section>
+        <footer class="page-footer"><span>Made with care for classrooms everywhere.</span><span>Attendance is stored on this device <i>·</i> Updates every few seconds</span></footer>
+      </div>
+    </main>
+  </div>
+
+  <dialog class="student-dialog" id="student-dialog">
+    <form id="student-form" method="dialog">
+      <button class="dialog-close" type="button" id="close-dialog" aria-label="Close">×</button>
+      <div class="eyebrow">GROW YOUR CLASS</div>
+      <h2>Add a student</h2>
+      <p class="dialog-copy">We'll make a unique QR code they can use to check in.</p>
+      <label for="student-name">Student name</label>
+      <input id="student-name" name="name" maxlength="80" placeholder="e.g. Taylor Brooks" required>
+      <label for="student-code">Student ID</label>
+      <input id="student-code" name="student_code" maxlength="32" placeholder="e.g. STU-1004" required>
+      <p class="form-hint">Use 2–32 letters, numbers, hyphens or underscores.</p>
+      <p class="form-error" id="form-error" role="alert"></p>
+      <button class="submit-button" type="submit">Add to my class <span>→</span></button>
+    </form>
+  </dialog>
+  <dialog class="student-dialog" id="enroll-dialog">
+    <form id="enroll-form">
+      <button class="dialog-close" type="button" id="close-enroll-dialog" aria-label="Close">×</button>
+      <div class="eyebrow">OPTIONAL FACE CHECK-IN</div>
+      <h2>Enroll a clear photo</h2>
+      <p class="dialog-copy">Use a photo with exactly one well-lit, front-facing face. The original image is processed on this computer and discarded.</p>
+      <label for="enroll-photo">Choose photo or take a picture</label>
+      <input id="enroll-photo" name="photo" type="file" accept="image/*" capture="user" required>
+      <label class="consent-label"><input id="enroll-consent" type="checkbox" required><span>I have the student's or guardian's permission to use a face template for attendance.</span></label>
+      <p class="form-error" id="enroll-error" role="alert"></p>
+      <button class="submit-button" type="submit">Save face template <span>→</span></button>
+    </form>
+  </dialog>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
