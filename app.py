@@ -19,6 +19,7 @@ import qrcode
 from qrcode.image.svg import SvgPathImage
 from flask import Flask, abort, current_app, jsonify, redirect, render_template, request, Response, session, url_for
 from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.security import generate_password_hash, check_password_hash
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -178,7 +179,8 @@ def initialize_database():
                     name TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     face_embedding TEXT,
-                    face_consent_at TEXT
+                    face_consent_at TEXT,
+                    password_hash TEXT
                 );
                 CREATE TABLE IF NOT EXISTS attendance (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -197,6 +199,8 @@ def initialize_database():
                 connection.execute("ALTER TABLE students ADD COLUMN face_embedding TEXT")
             if "face_consent_at" not in columns:
                 connection.execute("ALTER TABLE students ADD COLUMN face_consent_at TEXT")
+            if "password_hash" not in columns:
+                connection.execute("ALTER TABLE students ADD COLUMN password_hash TEXT")
             count = connection.execute("SELECT COUNT(*) FROM students").fetchone()[0]
             if count == 0:
                 created_at = datetime.now(ATTENDANCE_TIMEZONE).isoformat(timespec="seconds")
@@ -207,6 +211,24 @@ def initialize_database():
             connection.commit()
         finally:
             connection.close()
+
+
+def get_student_from_session():
+    """Extract student_id from Flask session. Returns None if not authenticated."""
+    return session.get("student_id")
+
+
+def requires_student_session(f):
+    """Decorator to protect student-only routes. Returns 401 if no valid student session."""
+    from functools import wraps
+    
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        student_id = get_student_from_session()
+        if not student_id:
+            return {"ok": False, "message": "Student session required"}, 401
+        return f(*args, **kwargs)
+    return decorated_function
 
 
 def qr_data_url(student_code):
@@ -749,6 +771,184 @@ def camera_status():
         return jsonify(status="Hosted mode", event="Use phone photo check-in; hosted servers do not have a webcam")
     _, status, event = scanner.snapshot()
     return jsonify(status=status, event=event)
+
+
+@app.post("/api/student-login")
+def student_login():
+    """Student login endpoint. Accepts student_id and password."""
+    data = request.get_json() or {}
+    student_id = data.get("student_id", "").strip()
+    password = data.get("password", "").strip()
+    
+    if not student_id or not password:
+        return {"ok": False, "message": "Student ID and password required"}, 400
+    
+    connection = get_db()
+    try:
+        student = connection.execute(
+            "SELECT id, student_code, name, password_hash FROM students WHERE student_code = ?",
+            (student_id,),
+        ).fetchone()
+        
+        if not student:
+            return {"ok": False, "message": "Invalid student ID or password"}, 401
+        
+        if not student["password_hash"] or not check_password_hash(student["password_hash"], password):
+            return {"ok": False, "message": "Invalid student ID or password"}, 401
+        
+        # Successful login: set session
+        session.clear()
+        session.permanent = True
+        session["student_id"] = student["id"]
+        get_csrf_token()
+        
+        return {
+            "ok": True,
+            "message": f"Welcome, {student['name']}",
+            "student": {
+                "id": student["id"],
+                "name": student["name"],
+                "student_code": student["student_code"],
+            },
+        }, 200
+    finally:
+        connection.close()
+
+
+@app.post("/api/student-logout")
+def student_logout():
+    """Student logout endpoint."""
+    session.clear()
+    return {"ok": True, "message": "Logged out successfully"}, 200
+
+
+@app.get("/api/student-dashboard")
+@requires_student_session
+def student_dashboard():
+    """Get student's own dashboard data: name, attendance records, percentage, today's status."""
+    student_id = get_student_from_session()
+    
+    connection = get_db()
+    try:
+        student = connection.execute(
+            "SELECT id, student_code, name FROM students WHERE id = ?",
+            (student_id,),
+        ).fetchone()
+        
+        if not student:
+            return {"ok": False, "message": "Student not found"}, 404
+        
+        # Get attendance records for this student only (data isolation critical)
+        attendance_records = connection.execute(
+            """
+            SELECT attendance_date, status, scanned_at
+            FROM attendance
+            WHERE student_id = ?
+            ORDER BY attendance_date DESC
+            """,
+            (student_id,),
+        ).fetchall()
+        
+        # Calculate attendance percentage
+        today = datetime.now(ATTENDANCE_TIMEZONE).date().isoformat()
+        present_count = sum(1 for r in attendance_records if r["status"] == "present")
+        late_count = sum(1 for r in attendance_records if r["status"] == "late")
+        total_attendance_days = len(set(r["attendance_date"] for r in attendance_records))
+        
+        # Attendance percentage: (present + late) / total_days, or "N/A" if less than 1 day
+        if total_attendance_days > 0:
+            percentage = round(((present_count + late_count) / total_attendance_days) * 100, 1)
+        else:
+            percentage = "N/A"
+        
+        today_status = next(
+            (r["status"].capitalize() for r in attendance_records if r["attendance_date"] == today),
+            None,
+        )
+        
+        return {
+            "ok": True,
+            "student": {
+                "id": student["id"],
+                "name": student["name"],
+                "student_code": student["student_code"],
+            },
+            "attendance": {
+                "percentage": percentage,
+                "present": present_count,
+                "late": late_count,
+                "total_days": total_attendance_days,
+                "today_status": today_status,
+                "recent_records": [
+                    {
+                        "date": r["attendance_date"],
+                        "status": r["status"],
+                        "scanned_at": r["scanned_at"],
+                    }
+                    for r in attendance_records[:10]
+                ],
+            },
+        }, 200
+    finally:
+        connection.close()
+
+
+@app.post("/api/students/<int:student_id>/face-enroll")
+@requires_student_session
+def student_face_enroll(student_id):
+    """Student photo enrollment endpoint. Accepts single image and stores face embedding."""
+    # Data isolation: student can only enroll their own photo
+    current_student_id = get_student_from_session()
+    if current_student_id != student_id:
+        return {"ok": False, "message": "Unauthorized"}, 403
+    
+    if "image" not in request.files:
+        return {"ok": False, "message": "No image provided"}, 400
+    
+    file = request.files["image"]
+    if not file or not file.filename:
+        return {"ok": False, "message": "No image provided"}, 400
+    
+    try:
+        # Read and decode image
+        image_data = file.read()
+        nparr = np.frombuffer(image_data, np.uint8)
+        image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        if image is None or image.size == 0:
+            return {"ok": False, "message": "Invalid image"}, 400
+        
+        # Detect face and extract embedding
+        faces = detector.detect(image)
+        if faces[1] is None or len(faces[1]) == 0:
+            return {"ok": False, "message": "No face detected in image"}, 400
+        
+        # Use first detected face
+        face_box = faces[1][0]
+        x, y, w, h = int(face_box[0]), int(face_box[1]), int(face_box[2]), int(face_box[3])
+        x, y, w, h = max(0, x), max(0, y), max(1, w), max(1, h)
+        face_roi = image[y : y + h, x : x + w]
+        
+        embedding = recognizer.infer(face_roi)
+        embedding_list = embedding.flatten().tolist() if hasattr(embedding, "flatten") else list(embedding)
+        embedding_json = json.dumps(embedding_list)
+        
+        # Store embedding in database
+        connection = get_db()
+        try:
+            consent_at = datetime.now(ATTENDANCE_TIMEZONE).isoformat(timespec="seconds")
+            connection.execute(
+                "UPDATE students SET face_embedding = ?, face_consent_at = ? WHERE id = ?",
+                (embedding_json, consent_at, student_id),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+        
+        return {"ok": True, "message": "Photo enrolled successfully"}, 200
+    except Exception as e:
+        logging.exception("Student face enrollment error")
+        return {"ok": False, "message": "Error processing image"}, 500
 
 
 @app.get("/healthz")
