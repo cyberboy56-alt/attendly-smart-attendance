@@ -8,7 +8,7 @@ GitHub hosts this repository's source code; GitHub Pages cannot run the Flask se
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https%3A%2F%2Fgithub.com%2Fcyberboy56-alt%2Fattendly-smart-attendance)
 
-The Blueprint uses a Starter web service and a persistent disk, which require a paid Render plan. During setup, provide a unique `ATTENDANCE_PASSWORD` of at least 16 characters in Render's environment-variable prompt. Render will generate `SECRET_KEY`. Once deployment completes, Render shows the live `https://…onrender.com` URL. Do not share that URL or password publicly; the app stores attendance and biometric face templates.
+The Blueprint uses Render's free web-service tier and stores SQLite data in temporary `/tmp` storage. Free services can spin down when idle, and local files may be lost on restart or redeploy; do not use this free setup for real student attendance records or face templates. For persistent attendance data, a paid web service with persistent storage or an external managed database is required. During setup, provide a unique `ATTENDANCE_PASSWORD` of at least 16 characters in Render's environment-variable prompt. Render will generate `SECRET_KEY`. Once deployment completes, Render shows the live `https://…onrender.com` URL. Do not share that URL or password publicly.
 
 ## Start the app
 
@@ -25,7 +25,7 @@ Open [http://127.0.0.1:5000](http://127.0.0.1:5000). On first start, the app cre
 
 ## Deploy privately to Render
 
-This repository includes a Render Blueprint (`render.yaml`). Push it to GitHub, then in Render choose **New → Blueprint** and select the repository. The blueprint provisions a Starter web service and a persistent disk for SQLite; persistent disks require a paid Render plan. Render generates `SECRET_KEY` and asks you to set `ATTENDANCE_PASSWORD`. Set a unique password with at least 16 characters in Render's secret environment variable prompt before the first deploy. The app refuses to start on Render without teacher authentication, a valid password, and a generated session secret.
+This repository includes a Render Blueprint (`render.yaml`). Push it to GitHub, then in Render choose **New → Blueprint** and select the repository. The blueprint provisions a free web service and stores its SQLite database in temporary storage. Free services may spin down while idle, and app files may be cleared on restart or redeploy; use fictional demo data only. For real attendance records or face templates, use paid hosting with persistent storage or a managed database. Render generates `SECRET_KEY` and asks you to set `ATTENDANCE_PASSWORD`. Set a unique password with at least 16 characters in Render's secret environment variable prompt before the first deploy. The app refuses to start on Render without teacher authentication, a valid password, and a generated session secret.
 
 After Render reports the service is live, open the service's **`https://…onrender.com`** URL and sign in with that teacher password. The HTTPS page can open the teacher's phone camera to capture a class photo. The hosted Render service has no access to the computer's webcam; it uses phone photo check-in instead. Keep the service private to intended teachers and do not share the URL or password publicly: this app handles student attendance and biometric face templates. Publicly publishing its *source* is not the same as making student records public. Review applicable school policies and obtain guardian/student permission before enrolling faces.
 
@@ -73,4 +73,4 @@ Run the tests with:
 python -m unittest discover -s tests -v
 ```
 
-For public hosting, use the authenticated Render Blueprint, HTTPS, and a persistent disk. The built-in shared teacher password and in-memory login throttling are suitable only for a small private pilot; the app still needs school-approved biometric consent and retention policies. Do not publish student data or expose the dashboard without teacher authentication.
+For real attendance data, use authenticated HTTPS hosting with persistent storage and school-approved biometric consent and retention policies. The free Render Blueprint is suitable only for a fictional-data demo because its local database is temporary and can be lost. The built-in shared teacher password and in-memory login throttling are suitable only for a small private pilot; do not publish student data or expose the dashboard without teacher authentication.
