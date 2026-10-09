@@ -4,11 +4,17 @@ A local Flask attendance dashboard with an SQLite roster, live OpenCV webcam pre
 
 ## Web preview and deployment
 
-GitHub hosts this repository's source code; GitHub Pages cannot run the Flask server, SQLite database, or webcam endpoints. A successful Pages build therefore does not mean the attendance dashboard is running. To create the actual HTTPS app, deploy the included Render Blueprint:
+GitHub hosts this repository's source code; GitHub Pages cannot run the Flask server, SQLite database, or webcam endpoints. A successful Pages build therefore does not mean the attendance dashboard is running. Start the free Render setup with one click:
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https%3A%2F%2Fgithub.com%2Fcyberboy56-alt%2Fattendly-smart-attendance)
 
-The Blueprint uses Render's free web-service tier and stores SQLite data in temporary `/tmp` storage. Free services can spin down when idle, and local files may be lost on restart or redeploy; do not use this free setup for real student attendance records or face templates. For persistent attendance data, a paid web service with persistent storage or an external managed database is required. During setup, provide a unique `ATTENDANCE_PASSWORD` of at least 16 characters in Render's environment-variable prompt. Render will generate `SECRET_KEY`. Once deployment completes, Render shows the live `https://…onrender.com` URL. Do not share that URL or password publicly.
+### Quick setup
+
+1. Sign in to Render and authorize access to this public GitHub repository.
+2. Review the blueprint and choose **Apply** to create the free web service.
+3. Enter a unique teacher password of at least 16 characters when prompted. Render generates `SECRET_KEY`; wait for the service build to finish, then open the `onrender.com` URL Render provides.
+
+The form is quick to complete, but account authorization, build time, and service startup depend on Render and may take longer than 50 seconds. This free blueprint stores SQLite data in temporary `/tmp` storage; free services can spin down while idle and local files may be lost on restart or redeploy. Use fictional data only—not real attendance records or face templates. Persistent attendance data requires paid hosting with persistent storage or an external managed database. Keep the teacher password private.
 
 ## Start the app
 
@@ -25,7 +31,7 @@ Open [http://127.0.0.1:5000](http://127.0.0.1:5000). On first start, the app cre
 
 ## Deploy privately to Render
 
-This repository includes a Render Blueprint (`render.yaml`). Push it to GitHub, then in Render choose **New → Blueprint** and select the repository. The blueprint provisions a free web service and stores its SQLite database in temporary storage. Free services may spin down while idle, and app files may be cleared on restart or redeploy; use fictional demo data only. For real attendance records or face templates, use paid hosting with persistent storage or a managed database. Render generates `SECRET_KEY` and asks you to set `ATTENDANCE_PASSWORD`. Set a unique password with at least 16 characters in Render's secret environment variable prompt before the first deploy. The app refuses to start on Render without teacher authentication, a valid password, and a generated session secret.
+This repository includes a Render Blueprint (`render.yaml`); use the one-click **Deploy to Render** button above, or choose **New → Blueprint** in Render and select this repository. The blueprint provisions a free web service and stores its SQLite database in temporary storage. Free services may spin down while idle, and app files may be cleared on restart or redeploy; use fictional demo data only. For real attendance records or face templates, use paid hosting with persistent storage or a managed database. Render generates `SECRET_KEY` and asks you to set `ATTENDANCE_PASSWORD`. Set a unique password with at least 16 characters in Render's secret environment variable prompt before the first deploy. The app refuses to start on Render without teacher authentication, a valid password, and a generated session secret.
 
 After Render reports the service is live, open the service's **`https://…onrender.com`** URL and sign in with that teacher password. The HTTPS page can open the teacher's phone camera to capture a class photo. The hosted Render service has no access to the computer's webcam; it uses phone photo check-in instead. Keep the service private to intended teachers and do not share the URL or password publicly: this app handles student attendance and biometric face templates. Publicly publishing its *source* is not the same as making student records public. Review applicable school policies and obtain guardian/student permission before enrolling faces.
 
