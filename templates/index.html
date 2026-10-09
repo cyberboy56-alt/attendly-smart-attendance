@@ -147,18 +147,21 @@
         <section class="group-photo-card" aria-labelledby="group-photo-title">
           <div class="group-photo-copy">
             <div class="eyebrow"><span class="terminal-led"></span> MOBILE CLASS CHECK-IN</div>
-            <h2 id="group-photo-title">Take one class photo.</h2>
-            <p>Capture a clear group photo on your phone. Enrolled faces are matched on this computer and checked in automatically.</p>
-            <div class="privacy-note"><span>⌑</span> Photos are processed locally and discarded. Only opted-in face templates are kept.</div>
+            <h2 id="group-photo-title">Check in with up to six photos.</h2>
+            <p>Capture several parts of the classroom when needed. Enrolled faces are matched on this computer and checked in automatically.</p>
+            <div class="privacy-note"><span>⌑</span> The app processes photos and discards them. Only opted-in face templates are kept.</div>
           </div>
           <form id="class-photo-form" class="group-photo-form">
-            <input id="class-photo-input" type="file" accept="image/*" capture="environment" hidden>
-            <img class="group-photo-preview" id="class-photo-preview" alt="Selected class photo preview" hidden>
+            <input id="class-gallery-input" type="file" accept="image/*" multiple hidden>
+            <input id="class-camera-input" type="file" accept="image/*" capture="environment" hidden>
+            <div class="group-photo-previews" id="class-photo-previews" aria-label="Selected class photo previews"></div>
             <div class="group-photo-actions">
-              <button class="camera-pick-button" type="button" id="pick-class-photo">▧ <span>Use phone camera</span></button>
+              <button class="camera-pick-button" type="button" id="pick-class-gallery">▧ <span>Choose up to 6 photos</span></button>
+              <button class="camera-pick-button" type="button" id="capture-class-photo">▣ <span>Take a photo</span></button>
               <button class="analyze-button" type="submit" id="analyze-class-photo" disabled>Recognize & check in <span>→</span></button>
             </div>
-            <div class="photo-feedback" id="photo-feedback" role="status" aria-live="polite">For best results, use a bright, front-facing photo.</div>
+            <button class="clear-photos-button" type="button" id="clear-class-photos" hidden>Clear selected photos</button>
+            <div class="photo-feedback" id="photo-feedback" role="status" aria-live="polite">Choose up to six images or take photos one at a time. Bright, front-facing photos work best.</div>
             <div class="photo-matches" id="photo-matches"></div>
           </form>
         </section>
@@ -177,6 +180,15 @@
                 <span class="face-state {{ 'enrolled' if student.face_enrolled else '' }}">{{ 'Face enrolled' if student.face_enrolled else 'QR check-in only' }}</span>
                 <button class="face-action" type="button" data-face-action="{{ student.student_code }}">{{ 'Replace face photo' if student.face_enrolled else 'Enroll face photo' }}</button>
                 {% if student.face_enrolled %}<button class="remove-face-action" type="button" data-remove-face="{{ student.student_code }}">Remove saved face template</button>{% endif %}
+                <div class="manual-attendance">
+                  <label class="sr-only" for="manual-status-{{ student.student_code }}">Today's attendance for {{ student.name }}</label>
+                  <select id="manual-status-{{ student.student_code }}" data-manual-status="{{ student.student_code }}">
+                    <option value="absent" {{ 'selected' if student.today_status == 'absent' or not student.today_status else '' }}>Absent</option>
+                    <option value="present" {{ 'selected' if student.today_status == 'present' else '' }}>Present</option>
+                    <option value="late" {{ 'selected' if student.today_status == 'late' else '' }}>Late</option>
+                  </select>
+                  <button type="button" data-manual-save="{{ student.student_code }}">Save</button>
+                </div>
               </div>
             </article>
             {% else %}
@@ -210,7 +222,7 @@
       <button class="dialog-close" type="button" id="close-enroll-dialog" aria-label="Close">×</button>
       <div class="eyebrow">OPTIONAL FACE CHECK-IN</div>
       <h2>Enroll a clear photo</h2>
-      <p class="dialog-copy">Use a photo with exactly one well-lit, front-facing face. The original image is processed on this computer and discarded.</p>
+      <p class="dialog-copy">Use a photo with exactly one well-lit, front-facing face. The app server processes the resized image and discards it.</p>
       <label for="enroll-photo">Choose photo or take a picture</label>
       <input id="enroll-photo" name="photo" type="file" accept="image/*" capture="user" required>
       <label class="consent-label"><input id="enroll-consent" type="checkbox" required><span>I have the student's or guardian's permission to use a face template for attendance.</span></label>

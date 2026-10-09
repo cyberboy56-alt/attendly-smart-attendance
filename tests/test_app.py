@@ -47,6 +47,8 @@ class AttendanceAppTests(unittest.TestCase):
         self.assertIn(b"Smart attendance terminal", response.data)
         self.assertIn(b"tailwindcss.com", response.data)
         self.assertIn(b"/video_feed", response.data)
+        self.assertIn(b"Choose up to 6 photos", response.data)
+        self.assertIn(b"Today's attendance", response.data)
 
     def test_scan_marks_student_present_and_prevents_duplicate(self):
         scanned_at = datetime.now(ATTENDANCE_TIMEZONE).replace(hour=8, minute=59)
@@ -72,6 +74,36 @@ class AttendanceAppTests(unittest.TestCase):
         self.assertEqual(result["status"], "late")
         self.assertEqual(missing_status, 404)
         self.assertFalse(missing["ok"])
+
+    def test_teacher_can_manually_set_and_clear_todays_attendance(self):
+        marked = self.client.put(
+            "/api/attendance/STU-1001",
+            json={"status": "late"},
+            headers=self.csrf_headers,
+        )
+        self.assertEqual(marked.status_code, 200)
+        self.assertEqual(marked.get_json()["status"], "late")
+        dashboard = self.client.get("/api/dashboard").get_json()
+        student = next(row for row in dashboard["students"] if row["student_code"] == "STU-1001")
+        self.assertEqual(student["today_status"], "late")
+        self.assertEqual(dashboard["counts"]["late"], 1)
+
+        absent = self.client.put(
+            "/api/attendance/STU-1001",
+            json={"status": "absent"},
+            headers=self.csrf_headers,
+        )
+        invalid = self.client.put(
+            "/api/attendance/STU-1001",
+            json={"status": "excused"},
+            headers=self.csrf_headers,
+        )
+        self.assertEqual(absent.status_code, 200)
+        self.assertEqual(invalid.status_code, 400)
+        dashboard = self.client.get("/api/dashboard").get_json()
+        student = next(row for row in dashboard["students"] if row["student_code"] == "STU-1001")
+        self.assertIsNone(student["today_status"])
+        self.assertEqual(dashboard["counts"]["absent"], 3)
 
     def test_add_student_validates_and_rejects_duplicate_ids(self):
         response = self.client.post(
@@ -138,6 +170,42 @@ class AttendanceAppTests(unittest.TestCase):
         self.assertEqual(removed.status_code, 200)
         dashboard = self.client.get("/api/dashboard").get_json()
         self.assertFalse(dashboard["students"][0]["face_enrolled"])
+
+    def test_class_capture_processes_six_photos_once_and_rejects_more(self):
+        with patch("app.extract_face_embeddings", return_value=[[1.0, 0.0]]) as extract:
+            enrollment = self.client.post(
+                "/api/students/STU-1001/face",
+                data={"consent": "yes", "photo": (BytesIO(b"reference"), "reference.jpg")},
+                content_type="multipart/form-data",
+                headers=self.csrf_headers,
+            )
+            self.assertEqual(enrollment.status_code, 200)
+
+            photos = [(BytesIO(f"class photo {index}".encode()), f"class-{index}.jpg") for index in range(6)]
+            capture = self.client.post(
+                "/api/capture",
+                data={"photos": photos},
+                content_type="multipart/form-data",
+                headers=self.csrf_headers,
+            )
+            self.assertEqual(capture.status_code, 200)
+            result = capture.get_json()
+            self.assertEqual(result["photos_processed"], 6)
+            self.assertEqual(result["faces_detected"], 6)
+            self.assertEqual(len(result["recognized"]), 1)
+            self.assertEqual(result["unknown_faces"], 5)
+
+            calls_before_limit = extract.call_count
+            too_many = self.client.post(
+                "/api/capture",
+                data={"photos": [
+                    (BytesIO(b"class photo"), f"class-{index}.jpg") for index in range(7)
+                ]},
+                content_type="multipart/form-data",
+                headers=self.csrf_headers,
+            )
+        self.assertEqual(too_many.status_code, 400)
+        self.assertEqual(extract.call_count, calls_before_limit)
 
     def test_dashboard_requires_teacher_login_when_authentication_is_enabled(self):
         app.config.update(AUTH_REQUIRED=True, ATTENDANCE_PASSWORD="A-strong-test-password-123")

@@ -41,12 +41,12 @@ The webcam runs on the computer hosting Flask. Allow camera access in the operat
 
 ## Phone photo check-in
 
-1. On each student card, select **Enroll face photo**, upload one clear, front-facing photo, and confirm student/guardian permission. Sample students are not enrolled.
+1. On each student card, select **Enroll face photo**, upload one clear, front-facing photo, and confirm student/guardian permission. The browser resizes the image before upload. Sample students are not enrolled.
 2. Connect the teacher's phone and the computer running Flask to the same trusted Wi-Fi network.
 3. Find the computer's private IPv4 address with `ipconfig` on Windows, then open `http://<computer-ip>:5000` on the teacher's phone.
-4. Choose **Use phone camera**, capture the class, and select **Recognize & check in**. Confident matches are automatically checked in; uncertain and unknown faces are not. The attendance list and counts refresh automatically.
+4. Choose up to six images from the photo gallery, or use **Take a photo** to add pictures one at a time. Select **Recognize & check in** when ready. Images are resized in the browser; confident matches are checked in once even if a student appears in multiple photos. Uncertain and unknown faces are not. The attendance list and counts refresh automatically.
 
-The app processes enrollment and class images locally using the bundled OpenCV YuNet detector and SFace recognizer. It discards uploaded photo files after processing and stores only face-embedding templates in SQLite. Templates can be replaced or removed on each student's card. Recognition may miss faces or match incorrectly, especially with small, turned, obscured, or poorly lit faces. Check the attendance list and correct errors using your normal attendance process; this is not a substitute for a reliable manual record. Photos and templates are sensitive biometric data: enroll only with appropriate student/guardian permission, follow your school's retention rules, and don't use public or untrusted Wi-Fi. The development server has no teacher login and must not be exposed to the public internet.
+The browser resizes images to a maximum 1920-pixel edge and JPEG quality 84%, then sends them to the Flask app server for OpenCV YuNet/SFace processing. The server discards uploaded image files after processing and stores only face-embedding templates in SQLite. Templates can be replaced or removed on each student's card. Teachers can also set a student's daily status to **Present**, **Late**, or **Absent** from their roster card; marking absent removes that student's check-in for today. Recognition may miss faces or match incorrectly, especially with small, turned, obscured, or poorly lit faces. Check the attendance list and use the manual controls to correct errors; this is not a substitute for a reliable manual record. Photos and templates are sensitive biometric data: enroll only with appropriate student/guardian permission, follow your school's retention rules, and use HTTPS or a trusted private Wi-Fi network. The local development server has no teacher login and must not be exposed to the public internet.
 
 The face-recognition model files are from [OpenCV Zoo](https://github.com/opencv/opencv_zoo) and are distributed under the included Apache License 2.0 (`models/LICENSE-2.0`).
 
@@ -70,7 +70,8 @@ The Flask development server listens on all interfaces to allow a phone on the s
 - `POST /api/students` — add a learner using JSON `{ "name": "...", "student_code": "..." }`.
 - `POST /api/students/<student_code>/face` — enroll one face from multipart fields `photo` and `consent=yes`.
 - `DELETE /api/students/<student_code>/face` — remove a learner's saved face template.
-- `POST /api/capture` — process a group image from multipart field `photo` and record confident matches.
+- `POST /api/capture` — process up to six group images from repeated multipart field `photos` (also accepts the legacy `photo` field) and record confident matches.
+- `PUT /api/attendance/<student_code>` — manually set today's status using JSON `{ "status": "present" | "late" | "absent" }`.
 - `POST /api/scan` — record a QR value using JSON `{ "qr_value": "STU-1001" }`; the value may also use the `ATTENDANCE:STU-1001` format.
 
 Run the tests with:

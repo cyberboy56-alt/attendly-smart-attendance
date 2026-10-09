@@ -224,6 +224,7 @@ def student_payload(student):
         "name": student["name"],
         "qr_code": qr_data_url(student["student_code"]),
         "face_enrolled": bool(student["face_embedding"]),
+        "today_status": student["today_status"] if "today_status" in student.keys() else None,
     }
 
 
@@ -290,9 +291,13 @@ def dashboard_data():
         ).fetchall()
         students = connection.execute(
             """
-            SELECT id, student_code, name, face_embedding
-            FROM students ORDER BY name COLLATE NOCASE
-            """
+            SELECT s.id, s.student_code, s.name, s.face_embedding, a.status AS today_status
+            FROM students s
+            LEFT JOIN attendance a
+                ON a.student_id = s.id AND a.attendance_date = ?
+            ORDER BY s.name COLLATE NOCASE
+            """,
+            (datetime.now(ATTENDANCE_TIMEZONE).date().isoformat(),),
         ).fetchall()
         present = sum(row["status"] == "present" for row in today_rows)
         late = sum(row["status"] == "late" for row in today_rows)
@@ -342,6 +347,53 @@ def api_scan():
         return jsonify(ok=False, message="Send a QR code value in the qr_value field."), 400
     result, status = mark_attendance(body["qr_value"])
     return jsonify(result), status
+
+
+@app.put("/api/attendance/<student_code>")
+def api_set_manual_attendance(student_code):
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict) or body.get("status") not in {"present", "late", "absent"}:
+        return jsonify(ok=False, message="Choose present, late, or absent."), 400
+
+    connection = get_db()
+    try:
+        student = connection.execute(
+            "SELECT id, student_code, name FROM students WHERE student_code = ? COLLATE NOCASE",
+            (student_code,),
+        ).fetchone()
+        if student is None:
+            return jsonify(ok=False, message="That student is not on the roster."), 404
+
+        status = body["status"]
+        if status == "absent":
+            connection.execute(
+                "DELETE FROM attendance WHERE student_id = ? AND attendance_date = ?",
+                (student["id"], datetime.now(ATTENDANCE_TIMEZONE).date().isoformat()),
+            )
+        else:
+            now = datetime.now(ATTENDANCE_TIMEZONE)
+            connection.execute(
+                """
+                INSERT INTO attendance (student_id, attendance_date, scanned_at, status)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(student_id, attendance_date)
+                DO UPDATE SET scanned_at = excluded.scanned_at, status = excluded.status
+                """,
+                (
+                    student["id"],
+                    now.date().isoformat(),
+                    now.isoformat(timespec="seconds"),
+                    status,
+                ),
+            )
+        connection.commit()
+        return jsonify(
+            ok=True,
+            status=status,
+            message=f"{student['name']} marked {status} for today.",
+        )
+    finally:
+        connection.close()
 
 
 @app.post("/api/students")
@@ -529,23 +581,30 @@ def api_remove_face(student_code):
 
 @app.post("/api/capture")
 def api_capture_class_photo():
-    image = request.files.get("photo")
-    if not image or not image.filename:
-        return jsonify(ok=False, message="Choose or capture a class photo first."), 400
+    photos = request.files.getlist("photos") or request.files.getlist("photo")
+    photos = [photo for photo in photos if photo and photo.filename]
+    if not photos:
+        return jsonify(ok=False, message="Choose or capture at least one class photo first."), 400
+    if len(photos) > 6:
+        return jsonify(ok=False, message="Choose no more than six class photos at a time."), 400
+
+    embeddings_by_photo = []
     try:
-        embeddings = extract_face_embeddings(image.read())
+        for photo in photos:
+            embeddings_by_photo.append(extract_face_embeddings(photo.read()))
     except ValueError as error:
-        return jsonify(ok=False, message=str(error)), 400
+        return jsonify(ok=False, message=f"{photo.filename}: {error}"), 400
     except (RuntimeError, cv2.error):
         logging.exception("Class photo could not be processed by the local recognition models")
         return jsonify(
             ok=False,
-            message="Face matching is unavailable. Check that the local model files are installed.",
+            message="Face matching is unavailable. Check that the local model files are installed and try again.",
         ), 503
-    if not embeddings:
+    faces_detected = sum(len(embeddings) for embeddings in embeddings_by_photo)
+    if not faces_detected:
         return jsonify(
             ok=False,
-            message="No clear faces found. Try a brighter photo with faces looking toward the camera.",
+            message="No clear faces found in these photos. Try brighter photos with faces looking toward the camera.",
         ), 422
 
     connection = get_db()
@@ -558,24 +617,28 @@ def api_capture_class_photo():
         ).fetchall()
         recognized = []
         seen_student_ids = set()
-        for embedding in embeddings:
-            student = closest_student(embedding, enrolled)
-            if student is None or student["id"] in seen_student_ids:
-                continue
-            seen_student_ids.add(student["id"])
-            result, _ = mark_attendance(student["student_code"])
-            recognized.append({
-                "name": student["name"],
-                "student_code": student["student_code"],
-                "message": result["message"],
-                "status": result.get("status", "already checked in"),
-            })
+        unknown_faces = 0
+        for embeddings in embeddings_by_photo:
+            for embedding in embeddings:
+                student = closest_student(embedding, enrolled)
+                if student is None or student["id"] in seen_student_ids:
+                    unknown_faces += 1
+                    continue
+                seen_student_ids.add(student["id"])
+                result, _ = mark_attendance(student["student_code"])
+                recognized.append({
+                    "name": student["name"],
+                    "student_code": student["student_code"],
+                    "message": result["message"],
+                    "status": result.get("status", "already checked in"),
+                })
         return jsonify(
             ok=True,
-            faces_detected=len(embeddings),
+            photos_processed=len(photos),
+            faces_detected=faces_detected,
             recognized=recognized,
-            unknown_faces=max(len(embeddings) - len(recognized), 0),
-            message=f"Found {len(embeddings)} face(s); checked in {sum(item['status'] in ('present', 'late') for item in recognized)} student(s).",
+            unknown_faces=unknown_faces,
+            message=f"Checked {len(photos)} photo(s), found {faces_detected} face(s), and recognized {len(recognized)} student(s).",
         )
     finally:
         connection.close()
