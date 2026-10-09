@@ -1,22 +1,27 @@
 import base64
+import hmac
 import io
 import json
 import logging
 import os
 import re
+import secrets
 import sqlite3
 import threading
 import time
-from datetime import date, datetime
+from datetime import datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import cv2
 import numpy as np
 import qrcode
-from flask import Flask, current_app, jsonify, render_template, request, Response
+from flask import Flask, abort, current_app, jsonify, redirect, render_template, request, Response, session, url_for
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 
 BASE_DIR = Path(__file__).resolve().parent
+ATTENDANCE_TIMEZONE = ZoneInfo(os.environ.get("ATTENDANCE_TIMEZONE", "Asia/Kolkata"))
 DEFAULT_STUDENTS = (
     ("STU-1001", "Alex Morgan"),
     ("STU-1002", "Jamie Patel"),
@@ -24,12 +29,34 @@ DEFAULT_STUDENTS = (
 )
 
 app = Flask(__name__)
+render_deployment = bool(os.environ.get("RENDER_EXTERNAL_URL"))
+require_auth = os.environ.get("ATTENDANCE_REQUIRE_AUTH", "").lower() in {"1", "true", "yes"}
+teacher_password = os.environ.get("ATTENDANCE_PASSWORD", "")
+secret_key = os.environ.get("SECRET_KEY", "")
+if render_deployment and not require_auth:
+    raise RuntimeError("ATTENDANCE_REQUIRE_AUTH must be enabled for hosted deployments.")
+if require_auth and len(teacher_password) < 16:
+    raise RuntimeError("Set ATTENDANCE_PASSWORD to a unique password of at least 16 characters.")
+if render_deployment and len(secret_key) < 32:
+    raise RuntimeError("Set SECRET_KEY to a randomly generated value of at least 32 characters.")
+
 app.config.update(
+    SECRET_KEY=secret_key or secrets.token_hex(32),
     DATABASE=os.environ.get("ATTENDANCE_DATABASE", str(BASE_DIR / "attendance.db")),
     LATE_AFTER=os.environ.get("ATTENDANCE_LATE_AFTER", "09:00"),
     CAMERA_INDEX=int(os.environ.get("ATTENDANCE_CAMERA_INDEX", "0")),
+    CAMERA_ENABLED=os.environ.get("ATTENDANCE_CAMERA_ENABLED", "true").lower() not in {"0", "false", "no"},
     MAX_CONTENT_LENGTH=16 * 1024 * 1024,
+    AUTH_REQUIRED=require_auth,
+    ATTENDANCE_PASSWORD=teacher_password,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=render_deployment,
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=8),
 )
+if render_deployment:
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
 logging.basicConfig(level=logging.INFO)
 FACE_MATCH_THRESHOLD = 0.45
 FACE_MATCH_MARGIN = 0.08
@@ -39,6 +66,94 @@ _face_model_lock = threading.Lock()
 _face_inference_lock = threading.Lock()
 _face_detector = None
 _face_recognizer = None
+_login_attempts = {}
+_login_attempts_lock = threading.Lock()
+LOGIN_ATTEMPT_LIMIT = 5
+LOGIN_LOCKOUT_SECONDS = 900
+
+
+def get_csrf_token():
+    token = session.get("csrf_token")
+    if token is None:
+        token = secrets.token_urlsafe(32)
+        session["csrf_token"] = token
+    return token
+
+
+@app.before_request
+def protect_dashboard():
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        expected = session.get("csrf_token", "")
+        submitted = request.headers.get("X-CSRF-Token") or request.form.get("csrf_token", "")
+        if not expected or not submitted or not hmac.compare_digest(expected, submitted):
+            if request.path.startswith("/api/"):
+                return jsonify(ok=False, message="Your session expired. Refresh the page and try again."), 400
+            abort(400, description="Invalid or expired request token. Refresh the page and try again.")
+
+    if app.config["AUTH_REQUIRED"] and request.endpoint not in {"login", "static", "health_check"}:
+        if session.get("authenticated") is not True:
+            if request.path.startswith("/api/") or request.path == "/video_feed":
+                return jsonify(ok=False, message="Please sign in to continue."), 401
+            return redirect(url_for("login"))
+
+
+@app.after_request
+def add_security_headers(response):
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "same-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(self), microphone=()")
+    if app.config["AUTH_REQUIRED"]:
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.get("/login")
+@app.post("/login")
+def login():
+    if not app.config["AUTH_REQUIRED"]:
+        return redirect(url_for("index"))
+    token = get_csrf_token()
+    message = None
+    if request.method == "POST":
+        client_ip = request.remote_addr or "unknown"
+        current_time = time.monotonic()
+        with _login_attempts_lock:
+            attempts, last_attempt = _login_attempts.get(client_ip, (0, 0.0))
+            if attempts >= LOGIN_ATTEMPT_LIMIT:
+                if current_time - last_attempt < LOGIN_LOCKOUT_SECONDS:
+                    return render_template(
+                        "login.html",
+                        csrf_token=token,
+                        error="Too many attempts. Wait 15 minutes before trying again.",
+                    ), 429
+                attempts = 0
+                _login_attempts[client_ip] = (attempts, current_time)
+
+        submitted_password = request.form.get("password", "")
+        if hmac.compare_digest(
+            submitted_password.encode("utf-8"),
+            app.config["ATTENDANCE_PASSWORD"].encode("utf-8"),
+        ):
+            with _login_attempts_lock:
+                _login_attempts.pop(client_ip, None)
+            session.clear()
+            session.permanent = True
+            session["authenticated"] = True
+            get_csrf_token()
+            return redirect(url_for("index"))
+
+        with _login_attempts_lock:
+            attempts, _ = _login_attempts.get(client_ip, (0, 0.0))
+            _login_attempts[client_ip] = (attempts + 1, current_time)
+        message = "That password didn't match. Please try again."
+    return render_template("login.html", csrf_token=token, error=message), 401 if message else 200
+
+
+@app.post("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login" if app.config["AUTH_REQUIRED"] else "index"))
 
 
 def get_db():
@@ -83,7 +198,7 @@ def initialize_database():
                 connection.execute("ALTER TABLE students ADD COLUMN face_consent_at TEXT")
             count = connection.execute("SELECT COUNT(*) FROM students").fetchone()[0]
             if count == 0:
-                created_at = datetime.now().astimezone().isoformat(timespec="seconds")
+                created_at = datetime.now(ATTENDANCE_TIMEZONE).isoformat(timespec="seconds")
                 connection.executemany(
                     "INSERT INTO students (student_code, name, created_at) VALUES (?, ?, ?)",
                     [(code, name, created_at) for code, name in DEFAULT_STUDENTS],
@@ -118,7 +233,7 @@ def mark_attendance(qr_value, scanned_at=None):
     if not code:
         return {"ok": False, "message": "The QR code did not contain a student ID."}, 400
 
-    timestamp = scanned_at or datetime.now().astimezone()
+    timestamp = (scanned_at or datetime.now(ATTENDANCE_TIMEZONE)).astimezone(ATTENDANCE_TIMEZONE)
     attendance_date = timestamp.date().isoformat()
     status = "late" if timestamp.strftime("%H:%M") > current_app.config["LATE_AFTER"] else "present"
 
@@ -170,7 +285,7 @@ def dashboard_data():
             WHERE a.attendance_date = ?
             ORDER BY a.scanned_at DESC
             """,
-            (date.today().isoformat(),),
+            (datetime.now(ATTENDANCE_TIMEZONE).date().isoformat(),),
         ).fetchall()
         students = connection.execute(
             """
@@ -181,7 +296,7 @@ def dashboard_data():
         present = sum(row["status"] == "present" for row in today_rows)
         late = sum(row["status"] == "late" for row in today_rows)
         return {
-            "date": date.today().strftime("%A, %B %d, %Y"),
+            "date": datetime.now(ATTENDANCE_TIMEZONE).strftime("%A, %B %d, %Y"),
             "counts": {
                 "present": present,
                 "late": late,
@@ -200,6 +315,7 @@ def dashboard_data():
             "students": [student_payload(student) for student in students],
             "late_after": current_app.config["LATE_AFTER"],
             "face_enrolled": sum(bool(student["face_embedding"]) for student in students),
+            "camera_enabled": current_app.config["CAMERA_ENABLED"],
         }
     finally:
         connection.close()
@@ -208,6 +324,8 @@ def dashboard_data():
 @app.route("/")
 def index():
     data = dashboard_data()
+    data["csrf_token"] = get_csrf_token()
+    data["auth_required"] = app.config["AUTH_REQUIRED"]
     return render_template("index.html", **data)
 
 
@@ -245,7 +363,7 @@ def api_add_student():
     try:
         cursor = connection.execute(
             "INSERT INTO students (student_code, name, created_at) VALUES (?, ?, ?)",
-            (code, name, datetime.now().astimezone().isoformat(timespec="seconds")),
+            (code, name, datetime.now(ATTENDANCE_TIMEZONE).isoformat(timespec="seconds")),
         )
         connection.commit()
         student = connection.execute(
@@ -377,7 +495,7 @@ def api_enroll_face(student_code):
             """,
             (
                 json.dumps(embeddings[0], separators=(",", ":")),
-                datetime.now().astimezone().isoformat(timespec="seconds"),
+                datetime.now(ATTENDANCE_TIMEZONE).isoformat(timespec="seconds"),
                 student_code,
             ),
         )
@@ -556,13 +674,30 @@ def camera_stream():
 
 @app.get("/video_feed")
 def video_feed():
+    if not current_app.config["CAMERA_ENABLED"]:
+        return jsonify(ok=False, message="The hosted server has no classroom webcam. Use phone photo check-in."), 503
     return Response(camera_stream(), mimetype="multipart/x-mixed-replace; boundary=frame")
 
 
 @app.get("/api/camera-status")
 def camera_status():
+    if not current_app.config["CAMERA_ENABLED"]:
+        return jsonify(status="Hosted mode", event="Use phone photo check-in; hosted servers do not have a webcam")
     _, status, event = scanner.snapshot()
     return jsonify(status=status, event=event)
+
+
+@app.get("/healthz")
+def health_check():
+    connection = get_db()
+    try:
+        connection.execute("SELECT 1")
+        return jsonify(status="ok")
+    except sqlite3.Error:
+        logging.exception("Hosted health check could not reach the attendance database")
+        return jsonify(status="unavailable"), 503
+    finally:
+        connection.close()
 
 
 initialize_database()

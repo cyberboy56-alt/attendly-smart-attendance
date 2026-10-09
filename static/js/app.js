@@ -3,8 +3,15 @@ const studentGrid = document.getElementById("student-grid");
 const dialog = document.getElementById("student-dialog");
 const form = document.getElementById("student-form");
 const toast = document.getElementById("toast");
+const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
 let toastTimeout;
 let lastAnnouncement = "";
+
+function csrfFetch(url, options = {}) {
+  const headers = new Headers(options.headers || {});
+  headers.set("X-CSRF-Token", csrfToken);
+  return fetch(url, { ...options, headers });
+}
 
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, character => ({
@@ -109,7 +116,7 @@ form.addEventListener("submit", async event => {
   submitButton.disabled = true;
   errorMessage.textContent = "";
   try {
-    const response = await fetch("/api/students", {
+    const response = await csrfFetch("/api/students", {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({
@@ -138,7 +145,7 @@ studentGrid.addEventListener("click", event => {
   if (removeButton) {
     const code = removeButton.dataset.removeFace;
     if (!window.confirm(`Remove ${code}'s locally saved face template?`)) return;
-    fetch(`/api/students/${encodeURIComponent(code)}/face`, { method: "DELETE" })
+    csrfFetch(`/api/students/${encodeURIComponent(code)}/face`, { method: "DELETE" })
       .then(async response => {
         const result = await response.json();
         if (!response.ok) throw new Error(result.message || "Unable to remove face template.");
@@ -173,7 +180,7 @@ document.getElementById("enroll-form").addEventListener("submit", async event =>
   submitButton.disabled = true;
   errorMessage.textContent = "";
   try {
-    const response = await fetch(`/api/students/${encodeURIComponent(selectedStudentCode)}/face`, {
+    const response = await csrfFetch(`/api/students/${encodeURIComponent(selectedStudentCode)}/face`, {
       method: "POST",
       body
     });
@@ -224,7 +231,7 @@ document.getElementById("class-photo-form").addEventListener("submit", async eve
   feedback.textContent = "Looking for enrolled faces…";
   matches.replaceChildren();
   try {
-    const response = await fetch("/api/capture", { method: "POST", body });
+    const response = await csrfFetch("/api/capture", { method: "POST", body });
     const result = await response.json();
     if (!response.ok) throw new Error(result.message || "The class photo could not be analyzed.");
     feedback.textContent = `${result.message} ${result.unknown_faces} unmatched or already-seen face(s).`;

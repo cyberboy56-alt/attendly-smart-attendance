@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#090d14">
+  <title>Sign in — Attendly</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="login-page">
+  <main class="login-card">
+    <a class="brand login-brand" href="{{ url_for('login') }}">
+      <span class="brand-mark">a.</span>
+      <span>attendly<span class="brand-dot">.</span><small>LEARNING, IN SESSION</small></span>
+    </a>
+    <div class="eyebrow"><span class="eyebrow-line"></span> TEACHER ACCESS</div>
+    <h1>Welcome back.</h1>
+    <p class="login-copy">Sign in to open your classroom attendance dashboard.</p>
+    <form method="post" action="{{ url_for('login') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label for="teacher-password">Teacher password</label>
+      <input id="teacher-password" name="password" type="password" autocomplete="current-password" minlength="16" maxlength="256" required autofocus>
+      {% if error %}<p class="login-error" role="alert">{{ error }}</p>{% endif %}
+      <button class="submit-button" type="submit">Sign in <span>→</span></button>
+    </form>
+    <p class="login-privacy">Student records and face templates are only available after sign-in.</p>
+  </main>
+</body>
+</html>

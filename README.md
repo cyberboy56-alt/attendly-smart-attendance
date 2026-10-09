@@ -15,6 +15,14 @@ python app.py
 
 Open [http://127.0.0.1:5000](http://127.0.0.1:5000). On first start, the app creates `attendance.db` and adds three sample learners. Remove the sample entries from the database before using real class records.
 
+## Deploy privately to Render
+
+This repository includes a Render Blueprint (`render.yaml`). Push it to GitHub, then in Render choose **New → Blueprint** and select the repository. The blueprint provisions a Starter web service and a persistent disk for SQLite; persistent disks require a paid Render plan. Render generates `SECRET_KEY` and asks you to set `ATTENDANCE_PASSWORD`. Set a unique password with at least 16 characters in Render's secret environment variable prompt before the first deploy. The app refuses to start on Render without teacher authentication, a valid password, and a generated session secret.
+
+After Render reports the service is live, open the service's **`https://…onrender.com`** URL and sign in with that teacher password. The HTTPS page can open the teacher's phone camera to capture a class photo. The hosted Render service has no access to the computer's webcam; it uses phone photo check-in instead. Keep the service private to intended teachers and do not share the URL or password publicly: this app handles student attendance and biometric face templates. Publicly publishing its *source* is not the same as making student records public. Review applicable school policies and obtain guardian/student permission before enrolling faces.
+
+The single shared teacher password and in-memory login throttling are basic safeguards for a small private pilot, not an identity system for a school deployment. For production, use an organization-managed identity provider, audit logging, a formal retention/deletion policy, and a security review before using student biometric data.
+
 The webcam runs on the computer hosting Flask. Allow camera access in the operating system, connect a webcam, then display or print a learner's QR code from the dashboard. The QR code contains the learner's student ID. A scan records one check-in per student per day; check-ins after 09:00 are marked late by default.
 
 ## Phone photo check-in
@@ -35,6 +43,7 @@ The face-recognition model files are from [OpenCV Zoo](https://github.com/opencv
 | `ATTENDANCE_DATABASE` | `attendance.db` beside `app.py` | SQLite database file |
 | `ATTENDANCE_CAMERA_INDEX` | `0` | OpenCV webcam index |
 | `ATTENDANCE_LATE_AFTER` | `09:00` | Local 24-hour cutoff; later arrivals are marked late |
+| `ATTENDANCE_TIMEZONE` | `Asia/Kolkata` | IANA timezone used to determine attendance day and late cutoff |
 | `PORT` | `5000` | Local Flask port |
 
 The Flask development server listens on all interfaces to allow a phone on the same Wi-Fi to connect. Restrict access with your network firewall and use only a trusted private network. The page loads Tailwind CSS from its CDN. An internet connection is needed for those utility styles; the dashboard's custom stylesheet remains local.
@@ -56,4 +65,4 @@ Run the tests with:
 python -m unittest discover -s tests -v
 ```
 
-This is intended for a trusted local classroom network only. Before any broader deployment, add authentication, HTTPS, CSRF protection, and appropriate consent and retention controls; do not expose student records, face templates, or camera streams publicly.
+For public hosting, use the authenticated Render Blueprint, HTTPS, and a persistent disk. The built-in shared teacher password and in-memory login throttling are suitable only for a small private pilot; the app still needs school-approved biometric consent and retention policies. Do not publish student data or expose the dashboard without teacher authentication.
