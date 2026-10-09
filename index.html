@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#090d14">
+  <meta name="description" content="Preview the Attendly smart classroom attendance dashboard.">
+  <title>Attendly — Dashboard preview</title>
+  <link rel="stylesheet" href="./static/css/style.css">
+  <style>
+    .preview-banner {
+      display: flex;
+      align-items: flex-start;
+      gap: 11px;
+      margin: 0 0 21px;
+      padding: 13px 15px;
+      border: 1px solid #66502d;
+      border-radius: 9px;
+      background: #211b12;
+      color: #f0d39f;
+      font-size: 11px;
+      line-height: 1.6;
+    }
+    .preview-banner strong { display: block; color: #ffe0a9; }
+    .preview-banner p { margin: 2px 0 0; }
+    .preview-banner a { color: #ffe0a9; text-underline-offset: 3px; }
+    .demo-terminal {
+      min-height: 210px;
+      margin-top: 16px;
+      display: grid;
+      place-items: center;
+      position: relative;
+      overflow: hidden;
+      border: 1px solid #1d3030;
+      border-radius: 8px;
+      background:
+        radial-gradient(ellipse at center, #17302d 0, #101b20 34%, #080d12 75%);
+    }
+    .demo-terminal::before, .demo-terminal::after {
+      content: "";
+      position: absolute;
+      width: 25px;
+      height: 25px;
+      border-color: #6ce2af;
+      border-style: solid;
+    }
+    .demo-terminal::before {
+      inset: 18px auto auto 18px;
+      border-width: 2px 0 0 2px;
+      border-radius: 6px 0 0;
+    }
+    .demo-terminal::after {
+      inset: auto 18px 18px auto;
+      border-width: 0 2px 2px 0;
+      border-radius: 0 0 6px;
+    }
+    .demo-terminal-inner { text-align: center; padding: 24px; }
+    .demo-qr {
+      display: grid;
+      place-items: center;
+      width: 64px;
+      height: 64px;
+      margin: 0 auto 13px;
+      border: 6px solid #e4f5eb;
+      border-radius: 4px;
+      background: repeating-conic-gradient(#16221e 0 25%, #e4f5eb 0 50%) 0 / 12px 12px;
+      color: #74e0b4;
+      font-size: 23px;
+      text-shadow: 0 1px #101720, 1px 0 #101720, -1px 0 #101720;
+    }
+    .demo-terminal-inner strong { display: block; color: #dce7e2; font-size: 11px; }
+    .demo-terminal-inner span { display: block; margin-top: 5px; color: #8b9b9a; font-size: 9px; }
+    .preview-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      margin-top: 13px;
+      padding: 9px 12px;
+      border-radius: 7px;
+      background: #74e0b4;
+      color: #092219;
+      font-size: 10px;
+      font-weight: 700;
+      text-decoration: none;
+    }
+    .preview-link:hover { background: #9af0cf; }
+    .demo-students { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .demo-student { cursor: default; }
+    .demo-student .student-card-info { margin-bottom: 9px; }
+    .demo-code {
+      display: inline-block;
+      margin-left: 37px;
+      color: #8290a0;
+      font-size: 8px;
+    }
+    .demo-note { margin: 15px 0 0; color: #8793a4; font-size: 9px; line-height: 1.6; }
+    @media (max-width: 900px) {
+      .demo-students { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 580px) {
+      .demo-students { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-ink text-slate-100 antialiased">
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="#overview" aria-label="Attendly preview home">
+        <span class="brand-mark">a.</span>
+        <span>attendly<span class="brand-dot">.</span><small>LEARNING, IN SESSION</small></span>
+      </a>
+      <div class="workspace-label">WORKSPACE</div>
+      <nav class="side-nav" aria-label="Preview sections">
+        <a class="nav-link active" href="#overview"><span>◫</span> Overview</a>
+        <a class="nav-link" href="#attendance"><span>◷</span> Attendance log</a>
+        <a class="nav-link" href="#students"><span>♙</span> Students</a>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="help-card">
+          <div class="help-icon">✳</div>
+          <strong>Made for better days.</strong>
+          <p>A friendly little terminal for getting every learner in the room.</p>
+        </div>
+        <div class="profile">
+          <div class="avatar">T</div>
+          <div><strong>Teacher dashboard</strong><span>Preview mode</span></div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main-content" id="overview">
+      <header class="topbar">
+        <div class="mobile-brand"><span class="brand-mark">a.</span> attendly<span class="brand-dot">.</span></div>
+        <div class="breadcrumb">Workspace <span>/</span> <strong>Dashboard preview</strong></div>
+        <div class="topbar-right">
+          <span class="today-date" id="preview-date"></span>
+          <span class="live-pill"><i></i> Demo</span>
+        </div>
+      </header>
+
+      <div class="page-wrap">
+        <aside class="preview-banner" role="note">
+          <span aria-hidden="true">ⓘ</span>
+          <div>
+            <strong>Visual preview — sample data only</strong>
+            <p>This GitHub Pages demo is read-only. It does not use a camera, recognize faces, save check-ins, or connect to a database. <a href="./README.md">Read how to run or deploy the full Flask app</a>.</p>
+          </div>
+        </aside>
+
+        <section class="welcome-row">
+          <div>
+            <div class="eyebrow"><span class="eyebrow-line"></span> YOUR CLASSROOM, AT A GLANCE</div>
+            <h1>Good morning, <span>teacher.</span></h1>
+            <p class="welcome-copy">A calm start to a great day of learning.</p>
+          </div>
+          <div class="date-chip"><span>◷</span><div><small>CLASS DATE</small><strong id="class-date"></strong></div></div>
+        </section>
+
+        <section class="stats-grid" aria-label="Sample attendance summary">
+          <article class="stat-card present-card">
+            <div class="stat-top"><span class="stat-label">Present</span><span class="stat-icon">✓</span></div>
+            <div class="stat-number">2</div>
+            <div class="stat-foot"><span class="status-dot green"></span> Sample check-ins</div>
+          </article>
+          <article class="stat-card absent-card">
+            <div class="stat-top"><span class="stat-label">Absent</span><span class="stat-icon">−</span></div>
+            <div class="stat-number">1</div>
+            <div class="stat-foot"><span class="status-dot muted"></span> Sample roster</div>
+          </article>
+          <article class="stat-card late-card">
+            <div class="stat-top"><span class="stat-label">Late</span><span class="stat-icon">↗</span></div>
+            <div class="stat-number">1</div>
+            <div class="stat-foot"><span class="status-dot amber"></span> Example after 09:00</div>
+          </article>
+          <article class="stat-card total-card">
+            <div class="stat-top"><span class="stat-label">On the roster</span><span class="stat-icon">♙</span></div>
+            <div class="stat-number">3</div>
+            <div class="stat-foot"><span class="status-dot blue"></span> Example learners</div>
+          </article>
+        </section>
+
+        <section class="work-grid camera-disabled">
+          <article class="terminal-card">
+            <div class="card-heading">
+              <div><div class="eyebrow"><span class="terminal-led"></span> CLASSROOM TERMINAL</div><h2>Ready when you are.</h2></div>
+              <span class="terminal-tag"><span></span> PREVIEW ONLY</span>
+            </div>
+            <div class="demo-terminal" aria-label="Illustrative QR scanner preview">
+              <div class="demo-terminal-inner">
+                <div class="demo-qr" aria-hidden="true">▦</div>
+                <strong>QR scanner preview</strong>
+                <span>Camera check-in is available in the Flask app.</span>
+              </div>
+            </div>
+            <div class="terminal-footer">
+              <div class="terminal-instruction"><span class="qr-glyph">▦</span><span><strong>Scan a student QR code</strong><small>Connect the Flask app to use a camera.</small></span></div>
+              <div class="terminal-meta"><span class="green-text">●</span> <b>2</b> sample check-ins</div>
+            </div>
+          </article>
+
+          <article class="activity-card" id="attendance">
+            <div class="section-title-row">
+              <div><div class="eyebrow">A LITTLE PROGRESS</div><h2>Today's check-ins</h2></div>
+              <span class="count-badge">2 examples</span>
+            </div>
+            <div class="attendance-list">
+              <div class="attendance-row">
+                <div class="avatar student-avatar">A</div>
+                <div class="attendance-person"><strong>Alex Morgan</strong><span>DEMO-1001</span></div>
+                <div class="attendance-result"><span class="result-pill present">present</span><time>08:42</time></div>
+              </div>
+              <div class="attendance-row">
+                <div class="avatar student-avatar">J</div>
+                <div class="attendance-person"><strong>Jamie Patel</strong><span>DEMO-1002</span></div>
+                <div class="attendance-result"><span class="result-pill late">late</span><time>09:12</time></div>
+              </div>
+              <div class="empty-state">
+                <div class="empty-icon">◷</div>
+                <strong>Sample activity only</strong>
+                <span>No real attendance is recorded on this page.</span>
+              </div>
+            </div>
+            <div class="activity-note"><span>✦</span> Live attendance requires the Flask backend.</div>
+          </article>
+        </section>
+
+        <section class="group-photo-card">
+          <div class="group-photo-copy">
+            <div class="eyebrow"><span class="terminal-led"></span> MOBILE CLASS CHECK-IN</div>
+            <h2>Take one class photo.</h2>
+            <p>The full app can match a teacher-captured group photo with previously enrolled, permission-based face templates.</p>
+            <div class="privacy-note"><span>⌑</span> Face matching is not active in this static preview.</div>
+          </div>
+          <div>
+            <a class="preview-link" href="https://render.com/deploy?repo=https%3A%2F%2Fgithub.com%2Fcyberboy56-alt%2Fattendly-smart-attendance">Deploy the Flask app to Render <span aria-hidden="true">→</span></a>
+            <p class="demo-note">Render setup requires a paid service with persistent storage and a private teacher password. The dashboard is not live until you complete deployment.</p>
+          </div>
+        </section>
+
+        <section class="students-section" id="students">
+          <div class="section-title-row students-title">
+            <div><div class="eyebrow">YOUR CLASS COMMUNITY</div><h2>Sample students</h2><p class="section-subtitle">Fictional preview roster; no student data is stored here.</p></div>
+          </div>
+          <div class="student-grid demo-students">
+            <article class="student-card demo-student">
+              <div class="student-qr demo-qr" aria-hidden="true">▦</div>
+              <div class="student-card-body">
+                <div class="student-card-info"><div class="avatar student-avatar">A</div><div><strong>Alex Morgan</strong><span>DEMO-1001</span></div></div>
+                <span class="face-state">Sample QR preview</span>
+                <span class="demo-code">Demo only</span>
+              </div>
+            </article>
+            <article class="student-card demo-student">
+              <div class="student-qr demo-qr" aria-hidden="true">▦</div>
+              <div class="student-card-body">
+                <div class="student-card-info"><div class="avatar student-avatar">J</div><div><strong>Jamie Patel</strong><span>DEMO-1002</span></div></div>
+                <span class="face-state">Sample QR preview</span>
+                <span class="demo-code">Demo only</span>
+              </div>
+            </article>
+            <article class="student-card demo-student">
+              <div class="student-qr demo-qr" aria-hidden="true">▦</div>
+              <div class="student-card-body">
+                <div class="student-card-info"><div class="avatar student-avatar">S</div><div><strong>Sam Rivera</strong><span>DEMO-1003</span></div></div>
+                <span class="face-state">Sample QR preview</span>
+                <span class="demo-code">Demo only</span>
+              </div>
+            </article>
+          </div>
+        </section>
+        <footer class="page-footer"><span>Made with care for classrooms everywhere.</span><span><a href="https://github.com/cyberboy56-alt/attendly-smart-attendance">View source on GitHub</a></span></footer>
+      </div>
+    </main>
+  </div>
+  <script>
+    const date = new Intl.DateTimeFormat(undefined, {
+      weekday: "short", month: "short", day: "numeric", year: "numeric"
+    }).format(new Date());
+    document.getElementById("preview-date").textContent = date;
+    document.getElementById("class-date").textContent = date;
+  </script>
+</body>
+</html>
